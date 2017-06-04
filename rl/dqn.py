@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import random
 import gym
 import numpy as np
@@ -16,6 +17,21 @@ from keras.backend.tensorflow_backend import set_session
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.2
 set_session(tf.Session(config=config))
+
+action2index = {}
+index2action = []
+cnt = 0
+for i in range(10):
+    for j in range(10):
+        for k in range(10):
+            for l in range(10):
+                if i+j+k+l == 10:
+                    action2index[ (i,j,k,l) ] = cnt
+                    index2action.append( [i,j,k,l] )
+                    cnt += 1
+
+assert len(action2index) == len(index2action)
+print("action_space", len(index2action))
 
 
 def sum_sample(n=4, total=10):
@@ -49,9 +65,10 @@ class DQNAgent:
         model.add( Conv2D(32, (2, 2), input_shape=input_dim ))
         model.add( Activation('relu'))
         model.add( Flatten() )
-        model.add(Dense(256, activation='relu'))
+        #model.add(Dense(256, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
         model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        print(model.summary())
         return model
 
     def remember(self, state, action, reward, next_state, done):
@@ -89,7 +106,7 @@ class DQNAgent:
 
     def evaluate(self, env):
 
-        EPISODES = 100
+        EPISODES = 1000
         rew = []
         for e in range(EPISODES):
             state = env.reset()
@@ -97,13 +114,16 @@ class DQNAgent:
             reward_sum = 0
             for _ in range(62):
                 # print("Evaluating, round", _)
+
                 state = np.reshape(state, (1,) + self.state_size+(1,))
                 act_values = self.model.predict(state)
                 action =  np.argmax(act_values[0]) # returns action
-                # print("action", action)
+                print("state\n", np.reshape(state, (8,8)))
+                print("action\n", index2action[action])
+
                 next_state, reward, done, _ = env.step(action)
-                next_state = np.reshape(next_state, self.state_size+(1,) )
-                self.remember(state, action, reward, next_state, done)
+                # next_state = np.reshape(next_state, self.state_size+(1,) )
+                # self.remember(state, action, reward, next_state, done)
                 state = next_state
 
                 if done:
@@ -116,46 +136,4 @@ class DQNAgent:
             rew.append(reward_sum)
 
         return np.array(rew).mean()
-
-
-if __name__ == "__main__":
-    env = MazeEnv()
-    state_size = (8,8)
-    print("state_size", state_size)
-    action_size = 282
-    print("action_size", action_size)
-    agent = DQNAgent(state_size, action_size)
-    # agent.load("./save/cartpole-master.h5")
-    done = False
-    batch_size = 32
-
-    EPISODES = 1000
-
-    for e in range(EPISODES):
-        state = env.reset()
-        state = np.reshape(state, state_size+(1,))
-
-        for _ in range(62):
-            # print("round", _)
-            # env.render()
-            action = agent.act(state)
-            next_state, reward, done, _ = env.step(action)
-            next_state = np.reshape(next_state, state_size+(1,) )
-            agent.remember(state, action, reward, next_state, done)
-            state = next_state
-
-            if done:
-                break
-
-        if len(agent.memory) > batch_size:
-            agent.replay(batch_size)
-
-        eva = agent.evaluate(env)
-        print("evaluate", eva)
-        with open('tmp', 'a') as f:
-            print(eva, file=f)
-        if e % 10 == 0:
-             agent.save("./model.h5")
-
-
 

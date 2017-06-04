@@ -6,6 +6,10 @@ from gym import error, spaces
 from gym import utils
 from gym.utils import seeding
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 action2index = {}
 index2action = []
 cnt = 0
@@ -19,50 +23,44 @@ for i in range(10):
                     cnt += 1
 
 assert len(action2index) == len(index2action)
+dx = [1,0,-1,0]
+dy = [0,1,0,-1]
 
-label_to_action = {'up': 0, 'down': 1, 'left': 2, 'right': 3}
-action_to_label = {0: 'up', 1: 'down', 2: 'left', 3: 'right'}
-
-class MazeEnv(gym.Env, utils.EzPickle):
+class MazeEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        self.is_simulate = True
+        self.is_simulate = False
         self.X, self.Y = 8, 8
-        # self.observation_space = spaces.Box(0,2,shape=(8,8))
-        # self.action_space = spaces.Discrete(4)
-        # self.reward_range = (-1e9, -1)
         self.maze = np.zeros((8,8), dtype=int)
 
         self.round = 0
         self.sequences = np.arange(1, 63)
         np.random.shuffle(self.sequences)
         assert len(self.sequences) == 62
-        # self._print_maze()
 
     def _print_maze(self):
         print(self.maze)
 
     def _step(self, action):
+
         prob = index2action[action]
 
-        reward = self._run_step(prob)*-1.
-        # print("reward", reward)
-        # self._print_maze()
-        ob = self.getState()
-        episode_over = self.round == 62
-        return ob, reward, episode_over, {}
+        reward =  1e9 - self._run_step(prob)
+
+        done = self.round == 62
+        return self.getState(), reward, done, {}
 
 
     def _run_step(self, prob):
+
+
         prob = np.array(list(prob))/10
-        dx = [1,0,-1,0]
-        dy = [0,1,0,-1]
+
         # update state
         obstacle = (self.sequences[self.round]//8, self.sequences[self.round]%8)
         self.maze[ obstacle[0] ][ obstacle[1] ] = 1
         self.round += 1
-
 
         ''' Run by real simulation '''
         if self.is_simulate:
@@ -102,7 +100,7 @@ class MazeEnv(gym.Env, utils.EzPickle):
 
             try:
                 x = np.linalg.solve(np.mat(A), np.mat(b).T)
-                ret = x[0][0][0][0]
+                ret = x[0,0]
                 if ret<=0: return 1e9
                 return min(1e9, ret)
             except np.linalg.linalg.LinAlgError as e:
@@ -113,11 +111,8 @@ class MazeEnv(gym.Env, utils.EzPickle):
         return x < 0 or y < 0 or x >= self.X or y >= self.Y
 
     def getState(self):
-        return self.maze
+        return np.reshape(self.maze, (8,8,1))
 
-    def _get_reward(self):
-        """ Reward is given for scoring a goal. """
-        return -1
 
     def _reset(self):
         self.sequences = np.arange(1, 63)
@@ -125,12 +120,11 @@ class MazeEnv(gym.Env, utils.EzPickle):
         assert len(self.sequences) == 62
         self.round = 0
         self.maze = np.zeros((8,8), dtype=int)
-        # self._print_maze()
-        return self.maze
+        return self.getState()
 
     def _render(self, mode='human', close=False):
-        pass
+        return None
 
 if __name__=="__main__":
     env = MazeEnv()
-    print(env._run_step((2, 3, 3, 2)))
+    print(env._run_step((5, 5, 0, 0)))
