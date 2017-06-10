@@ -13,10 +13,6 @@ from keras.layers.core import Dense, Dropout, Activation, Flatten
 from maze import MazeEnv
 
 import tensorflow as tf
-from keras.backend.tensorflow_backend import set_session
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.2
-set_session(tf.Session(config=config))
 
 action2index = {}
 index2action = []
@@ -32,7 +28,6 @@ for i in range(10):
 
 assert len(action2index) == len(index2action)
 print("action_space", len(index2action))
-
 
 def sum_sample(n=4, total=10):
     """Return a randomly chosen list of n positive integers summing to total.
@@ -54,7 +49,7 @@ class DQNAgent:
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.001
+        self.learning_rate = 0.1
         self.model = self._build_model()
 
     def _build_model(self):
@@ -62,11 +57,11 @@ class DQNAgent:
         input_dim = self.state_size + (1,)
         model = Sequential()
 
-        model.add( Conv2D(32, (2, 2), input_shape=input_dim ))
-        model.add( Activation('relu'))
-        model.add( Flatten() )
-        #model.add(Dense(256, activation='relu'))
-        model.add(Dense(self.action_size, activation='linear'))
+        model.add(Conv2D(64, (2,2), input_shape=input_dim))
+        model.add(Activation('relu'))
+        model.add(Flatten())
+        model.add(Dense(282, activation='linear'))
+
         model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
         print(model.summary())
         return model
@@ -76,13 +71,15 @@ class DQNAgent:
 
     def act(self, state):
         if np.random.rand() <= self.epsilon:
-            return random.randrange(self.action_size)
+            ret = random.randrange(self.action_size)
+            return ret
         state = np.reshape(state, (1,8,8,1))
         act_values = self.model.predict(state)
         return np.argmax(act_values[0]) # returns action
 
     def replay(self, batch_size):
         minibatch = random.sample(self.memory, batch_size)
+
         for state, action, reward, next_state, done in minibatch:
 
             state = np.reshape(state, (1,8,8,1))
@@ -106,7 +103,7 @@ class DQNAgent:
 
     def evaluate(self, env):
 
-        EPISODES = 1000
+        EPISODES = 1
         rew = []
         for e in range(EPISODES):
             state = env.reset()
@@ -115,24 +112,17 @@ class DQNAgent:
             for _ in range(62):
                 # print("Evaluating, round", _)
 
+                #print(np.reshape(state, (8,8)))
                 state = np.reshape(state, (1,) + self.state_size+(1,))
                 act_values = self.model.predict(state)
                 action =  np.argmax(act_values[0]) # returns action
-                print("state\n", np.reshape(state, (8,8)))
-                print("action\n", index2action[action])
 
                 next_state, reward, done, _ = env.step(action)
-                # next_state = np.reshape(next_state, self.state_size+(1,) )
-                # self.remember(state, action, reward, next_state, done)
                 state = next_state
-
-                if done:
-                    # print("done", _)
-                    break
 
                 reward_sum += reward
 
-            print("reward_sum", reward_sum)
+            print('reward_sum', reward_sum)
             rew.append(reward_sum)
 
         return np.array(rew).mean()

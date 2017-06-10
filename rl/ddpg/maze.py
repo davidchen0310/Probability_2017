@@ -1,28 +1,12 @@
 import numpy as np
 import os, subprocess, time, signal
 import sys
+import copy
 import gym
 from gym import error, spaces
 from gym import utils
 from gym.utils import seeding
 
-import logging
-logger = logging.getLogger(__name__)
-
-
-action2index = {}
-index2action = []
-cnt = 0
-for i in range(10):
-    for j in range(10):
-        for k in range(10):
-            for l in range(10):
-                if i+j+k+l == 10:
-                    action2index[ (i,j,k,l) ] = cnt
-                    index2action.append( [i,j,k,l] )
-                    cnt += 1
-
-assert len(action2index) == len(index2action)
 dx = [1,0,-1,0]
 dy = [0,1,0,-1]
 
@@ -42,25 +26,27 @@ class MazeEnv(gym.Env):
     def _print_maze(self):
         print(self.maze)
 
-    def _step(self, action):
+    def _step(self, prob):
 
-        prob = index2action[action]
+        # update state
+        obstacle = (self.sequences[self.round]//8, self.sequences[self.round]%8)
+        assert self.maze[ obstacle[0] ][ obstacle[1] ] == 0
+        self.maze[ obstacle[0] ][ obstacle[1] ] = 1
+        self.round += 1
 
-        reward =  1e9 - self._run_step(prob)
+        #reward =  1e9 - self._run_step(obstacle, prob)
+        reward = -self._run_step(obstacle, prob)
 
         done = self.round == 62
         return self.getState(), reward, done, {}
 
 
-    def _run_step(self, prob):
+    # given the obstacle position and chosen probability
+    # return the expected steps needed for this round
+    def _run_step(self, obstacle, prob):
 
-
-        prob = np.array(list(prob))/10
-
-        # update state
-        obstacle = (self.sequences[self.round]//8, self.sequences[self.round]%8)
-        self.maze[ obstacle[0] ][ obstacle[1] ] = 1
-        self.round += 1
+        if min(prob) < 0 or max(prob) > 1:
+            return 1e9
 
         ''' Run by real simulation '''
         if self.is_simulate:
@@ -68,15 +54,15 @@ class MazeEnv(gym.Env):
             ITER = 100
             for _ in range(ITER):
                 pos = (0,0)
-                rounds = 0
+                steps = 0
                 while pos != (7,7):
                     move = np.random.choice(np.arange(4), p=prob)
                     nx, ny = pos[0]+dx[move], pos[1]+dy[move]
                     if not self._out_of_bound(nx, ny) and (nx,ny)!=obstacle:
                         pos = (nx, ny)
-                    rounds += 1
-                    if rounds >= 10000: break
-                res.append(rounds)
+                    steps += 1
+                    if steps >= 10000: break
+                res.append(steps)
             return np.array(res).mean()
         else:
             ''' Calculate with linalg '''
@@ -111,7 +97,7 @@ class MazeEnv(gym.Env):
         return x < 0 or y < 0 or x >= self.X or y >= self.Y
 
     def getState(self):
-        return np.reshape(self.maze, (8,8,1))
+        return copy.deepcopy(np.reshape(self.maze, (8,8)))
 
 
     def _reset(self):
@@ -127,4 +113,4 @@ class MazeEnv(gym.Env):
 
 if __name__=="__main__":
     env = MazeEnv()
-    print(env._run_step((5, 5, 0, 0)))
+    print(env._run_step((2,1),(0.45, 0.45, 0.05, 0.05)))
